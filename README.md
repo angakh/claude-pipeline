@@ -66,12 +66,27 @@ toDoStatus
 
 `planReviewStatus` is reused for two different human gates — plan approval, and final merge-readiness — deliberately: it always means "a human looks at this next." Labels + comment prefixes tell you which gate you're at, not the status name.
 
+## Prerequisites — one-time setup the plugin doesn't do for you
+
+Nothing below is handled by `/pipeline-init` or `/pipeline-sweep` — get these working first, or both commands will fail partway through instead of doing anything useful.
+
+- **Jira and Render MCP connections, plus a browser-automation MCP for QA** (e.g. Chrome) — these need to already be authenticated in Claude Code. That authentication is an interactive OAuth flow, so it has to happen in an interactive session, not from a scheduled/non-interactive sweep: run `/mcp` in a normal Claude Code session on the machine that will run this, and connect any of Jira/Render/the browser MCP that aren't already showing as connected. Re-check with `/mcp` before running `/pipeline-init` — if a connection is missing, `pipeline-init`'s auto-detection steps (Jira workflow statuses, Render Postgres instance) will fail outright rather than partially work.
+- **`gh` CLI authenticated**, if you're keeping `pr.autoCreate: true` (the default) — `qa-verify` opens PRs with it. Run `gh auth login` yourself in a plain terminal on that machine (not through a Claude Code Bash call) and confirm with `gh auth status`.
+- **Git push access to the target project's own remote already working** (SSH key, credential helper, whatever that repo normally uses) — `engineer-build` pushes feature branches there under your existing git identity.
+- **The target project's own local dev environment already boots** — its `.env.local`/secrets, database, etc. This plugin assumes `dev.startCommands` already works today when you run it by hand; it doesn't provision a project's own secrets or local setup.
+- **Push notifications enabled**, if you want the "ready for review" and "stuck after N QA cycles" alerts to actually reach you — check this Claude Code install's notification settings before relying on unattended sweeps to tell you when something needs attention.
+
 ## Setting this up in a project
 
-1. Install the plugin locally (path-based, until it has a real remote):
+1. Install the plugin — from the GitHub remote (works anywhere, on any machine with access to the repo):
+   ```bash
+   claude plugin marketplace add angakh/claude-pipeline
+   claude plugin install delivery-pipeline@delivery-pipeline-marketplace
+   ```
+   Or from a local clone/path (this machine only):
    ```bash
    claude plugin marketplace add /home/batch/claude-delivery-pipeline
-   claude plugin install delivery-pipeline
+   claude plugin install delivery-pipeline@delivery-pipeline-marketplace
    ```
 2. Inside the target project, run:
    ```
