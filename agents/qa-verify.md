@@ -18,7 +18,7 @@ Read `${CLAUDE_PLUGIN_ROOT}/references/prod-research-playbook.md` before you sta
 
 ## Process
 
-1. **Start the app**: run `dev.startCommand` in the worktree. Wait for `dev.readyCheckCommand` to succeed (or poll `dev.localUrl`) before touching the browser — don't race a slow boot.
+1. **Start the app**: run every command in `dev.startCommands` in the worktree, each backgrounded (they're separate long-running processes, e.g. API and UI). Wait for `dev.readyCheckCommand` to succeed (or poll `dev.localUrl`) before touching the browser — don't race a slow boot.
 2. **Run `dev.testCommand`.** A failing suite is an automatic fail — don't proceed to manual verification if the automated tests don't pass; that's already enough evidence to kick it back.
 3. **Drive the happy path and edge cases from the plan's acceptance criteria** using Chrome MCP against `dev.localUrl`, with a safe test account per `qa.testAccountStrategy` (never a real user's credentials). Actually click through it — don't just inspect the DOM for expected elements.
 4. **Capture evidence as you go**: local server log output, browser console output, and screenshots of anything unexpected. You'll need these either way — to prove a pass happened, or to explain a fail.

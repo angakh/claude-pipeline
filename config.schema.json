@@ -70,11 +70,12 @@
     },
     "dev": {
       "type": "object",
-      "required": ["startCommand", "localUrl", "testCommand"],
+      "required": ["startCommands", "localUrl", "testCommand"],
       "properties": {
-        "startCommand": {
-          "type": "string",
-          "description": "Shell command that starts the app locally on the feature branch, e.g. 'yarn dev'. QA runs this before driving the browser."
+        "startCommands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "One or more shell commands that together bring the app up locally on the feature branch — most repos need more than one (e.g. an API process and a UI process started separately). QA runs all of them, backgrounded, before driving the browser."
         },
         "localUrl": {
           "type": "string",

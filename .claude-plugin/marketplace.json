@@ -1,0 +1,13 @@
+{
+  "name": "delivery-pipeline-marketplace",
+  "owner": {
+    "name": "Vatche Chamlian"
+  },
+  "plugins": [
+    {
+      "name": "delivery-pipeline",
+      "source": "./",
+      "description": "Jira-driven delivery pipeline: triages reported issues against real evidence, drafts implementation plans, builds on a feature branch, and QA-loops with a local browser + server-log check before handing off for human review."
+    }
+  ]
+}

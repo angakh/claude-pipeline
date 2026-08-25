@@ -16,10 +16,10 @@
     "remote": "origin"
   },
   "dev": {
-    "startCommand": "yarn dev",
+    "startCommands": ["cd api && yarn start:api:dev", "yarn dev"],
     "localUrl": "http://localhost:3000",
-    "readyCheckCommand": "curl -s -o /dev/null -w '%{http_code}' http://localhost:5001/graphql",
-    "testCommand": "yarn jest"
+    "readyCheckCommand": "curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:5001/graphql -H 'content-type: application/json' -d '{\"query\":\"{__typename}\"}'",
+    "testCommand": "yarn test"
   },
   "db": {
     "mode": "direct-readonly",
