@@ -8,6 +8,8 @@ A Claude Code plugin that runs a Jira ticket through a full delivery cycle — c
 
 A cron job sweeps a Jira project on an interval. Every ticket it touches gets re-evaluated from scratch each time, based only on its current Jira status, labels, and comments, plus whether a git branch already exists for it — there's no separate database tracking pipeline state, because Jira already **is** the state, and that means you can always intervene by hand (move a card, leave a comment) and the next sweep will respect it.
 
+**Each sweep caps itself** at `sweep.maxTicketsPerRun` (default 5) — it does not try to process an entire backlog at once. Tickets already mid-pipeline (awaiting QA, then awaiting build) are always finished before new tickets are started, and anything left over just waits for the next sweep. A project's first few sweeps are automatically capped to 1 ticket regardless of that setting, so you can watch one go through the whole pipeline before trusting it with a full batch.
+
 Five specialized agents do the actual work; the orchestrator (`pipeline-sweep`) never writes code or Jira comments itself, only reads state and dispatches:
 
 | Agent | Job | Stops for a human when |

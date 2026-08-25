@@ -5,6 +5,21 @@
   "type": "object",
   "required": ["jira", "git", "dev", "db", "qa"],
   "properties": {
+    "sweep": {
+      "type": "object",
+      "properties": {
+        "maxTicketsPerRun": {
+          "type": "integer",
+          "default": 5,
+          "description": "Hard cap on how many tickets one pipeline-sweep pass will touch, across all stages combined. Without this, a sweep against a real backlog would dispatch every matching ticket at once — expensive, hard to review, and easy to overwhelm Jira/git/Render rate limits. Tickets already in progress (qaStatus, then buildStatus) are prioritized over starting new ones (toDoStatus), so in-flight work drains before new work begins. Consider starting lower (e.g. 1-2) for a project's first few sweeps until you've watched it handle a ticket end to end."
+        },
+        "maxConcurrentAgents": {
+          "type": "integer",
+          "default": 2,
+          "description": "Of the tickets selected for this run, how many get their agent dispatched at the same time. Keeps parallel git worktrees and API calls to Jira/Render bounded even when maxTicketsPerRun is higher."
+        }
+      }
+    },
     "jira": {
       "type": "object",
       "required": ["cloudId", "projectKey", "toDoStatus", "planReviewStatus", "buildStatus", "qaStatus", "doneStatus"],

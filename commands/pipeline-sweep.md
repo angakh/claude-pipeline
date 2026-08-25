@@ -16,7 +16,7 @@ All status/branch/command names below refer to the config fields (`jira.toDoStat
 
 ## 1. Query Jira
 
-Using `mcp__atlassian__searchJiraIssuesUsingJql` against `jira.cloudId` / `jira.projectKey`, pull tickets in each of these statuses (include labels, comments, issuetype, parent):
+Using `mcp__atlassian__searchJiraIssuesUsingJql` against `jira.cloudId` / `jira.projectKey`, pull tickets in each of these statuses (include labels, comments, issuetype, parent, priority, updated):
 
 - `jira.toDoStatus` — new/unprocessed tickets
 - `jira.buildStatus` — approved plans and in-flight builds
@@ -24,7 +24,22 @@ Using `mcp__atlassian__searchJiraIssuesUsingJql` against `jira.cloudId` / `jira.
 
 Skip anything already carrying the label `needs-human` — those are parked for you until a human clears the label.
 
-## 2. Categorize and dispatch
+## 2. Cap and order the run — do not process everything you found
+
+A real backlog can easily return more matching tickets than one sweep should touch at once. **Before dispatching anything**, build one prioritized list across all three statuses and cut it to `sweep.maxTicketsPerRun` (default 5) — this is a hard cap on the whole run, not per-status.
+
+Order the candidates like this, then take the top `sweep.maxTicketsPerRun`:
+
+1. **qaStatus tickets first** (finish what's already built before starting anything new).
+2. **buildStatus tickets second** (finish what's already approved/mid-build next).
+3. **toDoStatus tickets last** (only start new triage/planning work with whatever budget remains).
+4. Within each group, order by Jira priority (highest first), then by `updated` ascending (oldest-untouched first) as a tiebreak.
+
+If this project has had **fewer than 3 completed sweeps so far** (check: are there any tickets anywhere in this project carrying a pipeline comment marker like `[TRIAGE]`, `[TECH PLAN]`, `[BUILD]`, or `[QA REPORT`?), treat this as an early run and cap the list to **1** regardless of `sweep.maxTicketsPerRun`, so the first real end-to-end pass is easy to watch and sanity-check before trusting it with a full batch. Say explicitly in your final summary that you did this and why.
+
+Anything that didn't make the cut this pass is simply left for the next sweep — no action needed on it, nothing to flag.
+
+## 3. Categorize and dispatch
 
 For each ticket in **toDoStatus**:
 
@@ -38,19 +53,20 @@ For each ticket in **buildStatus** with a `plan-drafted` label and no existing `
 For each ticket in **qaStatus** with a pushed branch → dispatch to the `qa-verify` agent.
 - Before dispatching, count prior QA-failure comments (marked `[QA REPORT — FAIL]`) on the ticket. If the count has already reached `qa.maxCycles`, do NOT dispatch again — instead label `needs-human`, leave status as-is, and push-notify the user with a summary of every failed cycle and why. This cap exists so a genuinely hard bug doesn't silently burn cycles forever.
 
-## 3. Dispatching mechanics
+## 4. Dispatching mechanics
 
 - Use the `Agent` tool with the matching `subagent_type` (`pm-decompose`, `research-triage`, `tech-planner`, `engineer-build`, `qa-verify`) — these are defined in this plugin's `agents/` directory.
 - **Always brief the agent from scratch** — it has no memory of this conversation. Pass: the ticket key, full description/comments (fetched via `mcp__atlassian__getJiraIssue` with `comment` in fields), the relevant slice of the project config, and — for engineer/QA — the branch name to use.
-- **Multiple tickets in flight**: give each ticket its own git worktree via `EnterWorktree`/`ExitWorktree` before dispatching engineer/QA agents, so parallel builds never collide on branch checkout. Run independent tickets' agent dispatches in parallel; don't parallelize stages *within* one ticket (triage before plan before build before QA is a strict sequence per ticket).
+- **Multiple tickets in flight**: give each ticket its own git worktree via `EnterWorktree`/`ExitWorktree` before dispatching engineer/QA agents, so parallel builds never collide on branch checkout. Dispatch independent tickets' agents in parallel, but never more than `sweep.maxConcurrentAgents` (default 2) at once — queue the rest of this run's capped list behind the first batch rather than firing them all simultaneously. Don't parallelize stages *within* one ticket (triage before plan before build before QA is a strict sequence per ticket).
 - Agents report back what they did (comment posted, label set, status transitioned, branch pushed) — trust their report but spot-check anything surprising before moving to the next ticket.
 
-## 4. What you never do directly
+## 5. What you never do directly
 
 - Never write a Jira comment, transition a status, create a branch, or run app code yourself in this command — that's always a subagent's job, so the division of responsibility (and the audit trail in Jira comments) stays clean.
 - Never push to `git.trunkBranch`.
 - Never touch a ticket labeled `needs-human` — that label means the loop stopped on purpose and a human needs to look.
+- Never exceed `sweep.maxTicketsPerRun` or `sweep.maxConcurrentAgents` — the cap from step 2 is a hard ceiling for this run, not a suggestion.
 
-## 5. End of sweep
+## 6. End of sweep
 
-Summarize in your final message (to whoever/whatever invoked this — a human or the cron log): how many tickets were touched, what stage each moved to, and anything that hit `needs-human` or `needs-triage-decision` this pass. Push-notifications for individual ready-for-review or stuck tickets happen from within the relevant agent (qa-verify, research-triage) as they complete — this summary is the sweep-level roundup, not a duplicate notification.
+Summarize in your final message (to whoever/whatever invoked this — a human or the cron log): how many tickets matched vs. how many were actually touched (i.e. how many were left capped for next run), what stage each touched ticket moved to, and anything that hit `needs-human` or `needs-triage-decision` this pass. Push-notifications for individual ready-for-review or stuck tickets happen from within the relevant agent (qa-verify, research-triage) as they complete — this summary is the sweep-level roundup, not a duplicate notification.
