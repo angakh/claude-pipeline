@@ -2,7 +2,7 @@
 
 A Claude Code plugin that runs a Jira ticket through a full delivery cycle — confirm the problem is real, plan it, build it, QA it, hand it to a human — with Jira itself as the state machine so the process survives between runs without any external database.
 
-**Status: local, unpublished.** Not on a marketplace yet — install it from this local path in each project until it's stable enough to push to a real git remote.
+**Status: has a git remote, not on any marketplace listing.** Source lives at [github.com/angakh/claude-pipeline](https://github.com/angakh/claude-pipeline) — confirm its visibility matches your intent (kept out of any public/shared marketplace listing until it's solid). Install it from the local path or the git URL; either way it's only reachable by people with access to that repo.
 
 ## The idea
 
@@ -124,6 +124,6 @@ references/
 
 ## Known limitations / not yet built
 
-- No remote yet — local marketplace path only, per design (not ready to share broadly).
+- Not listed on any marketplace by design — reachable only via the git remote or local path, not ready to share broadly.
 - Agent `tools` are currently unrestricted (`"*"`) for all five agents to avoid under-provisioning during early iteration; worth tightening per-agent once the flows are proven out (e.g. `pm-decompose` and `tech-planner` don't need write/edit access to code at all).
 - Parallel-ticket worktree isolation is specified in `pipeline-sweep.md` but hasn't been exercised under real concurrent load yet.
