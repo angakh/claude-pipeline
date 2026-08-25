@@ -78,7 +78,17 @@ toDoStatus
    /pipeline-init
    ```
    This reads `config.schema.json`, explains every field as it asks for it (auto-detecting what it safely can — trunk branch, test/dev commands, live Jira workflow status names — and confirming the rest with you), and writes `.claude/delivery-pipeline.config.json`. That file is meant to be committed — it holds identifiers (Jira project key, branch prefix, Render service IDs, commands), never secrets. See `config.schema.json` for the full field reference and `config.example.json` for a filled-in example (Scroobious).
-3. Schedule the sweep (separate step — `pipeline-init` only writes config, it doesn't schedule anything):
+3. Try a sweep manually first, before scheduling anything:
+   ```
+   /pipeline-sweep list
+   ```
+   Shows every eligible ticket, what agent it would go to (or why it'd be skipped), and whether it falls inside the default cap — without touching Jira or dispatching anything. Then choose:
+   ```
+   /pipeline-sweep            # default: capped + prioritized (see below)
+   /pipeline-sweep 3          # process the top 3 from the prioritized list, this run only
+   /pipeline-sweep SCR-144,SCR-163   # process exactly these tickets, ignoring the cap
+   ```
+4. Schedule the sweep (separate step — `pipeline-init` only writes config, it doesn't schedule anything):
    ```
    /schedule
    ```

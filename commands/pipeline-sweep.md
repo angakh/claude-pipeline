@@ -1,6 +1,6 @@
 ---
 description: One pass of the delivery pipeline over the configured Jira project — triage, plan, build, and QA-loop tickets, dispatching to specialized agents. This is what the scheduled cron job runs.
-argument-hint: (no arguments — reads .claude/delivery-pipeline.config.json)
+argument-hint: "[list | <count> | <TICKET-1>,<TICKET-2>,...]  (no arguments = default capped/prioritized run)"
 allowed-tools: [Read, Bash, Agent, EnterWorktree, ExitWorktree]
 ---
 
@@ -14,6 +14,13 @@ Read `.claude/delivery-pipeline.config.json` in the project root. If it doesn't 
 
 All status/branch/command names below refer to the config fields (`jira.toDoStatus`, `git.branchPrefix`, etc.), not literal strings — different projects configure these differently.
 
+## 0.5. Parse `$ARGUMENTS` — pick a mode
+
+- **Empty** → `default` mode: use `sweep.maxTicketsPerRun` and the priority ordering in step 2 as-is, including the first-few-sweeps auto-cap-to-1 safety net.
+- **The literal word `list`** → `list` mode: build the full prioritized candidate list (step 2) but **do not dispatch anything at all** — no agents, no Jira writes, nothing. Print the list as a table (ticket key, type, current status, what stage/agent it would go to, and why — or why it'd be skipped, e.g. `needs-human`) and stop. This is the "show me what's there so I can choose" mode.
+- **A bare integer** (e.g. `3`) → `count-override` mode: same as `default`, except use this number in place of `sweep.maxTicketsPerRun` for this run only — **and this explicit number also overrides the first-few-sweeps auto-cap-to-1 safety net**, since typing a specific count is a deliberate choice that supersedes the automatic caution default.
+- **A comma-separated list of ticket keys** (e.g. `SCR-144,SCR-163`) → `explicit` mode: skip the querying/ordering/capping in step 2 entirely. Fetch exactly these tickets, validate each belongs to `jira.projectKey` (reject and report any that don't), and run each through the normal categorization logic in step 3 as if it had been selected — including a ticket labeled `needs-human`, since naming it explicitly here **is** the human clearing it for another pass. Still respects `sweep.maxConcurrentAgents` for dispatch pacing.
+
 ## 1. Query Jira
 
 Using `mcp__atlassian__searchJiraIssuesUsingJql` against `jira.cloudId` / `jira.projectKey`, pull tickets in each of these statuses (include labels, comments, issuetype, parent, priority, updated):
@@ -26,20 +33,26 @@ Skip anything already carrying the label `needs-human` — those are parked for 
 
 ## 2. Cap and order the run — do not process everything you found
 
-A real backlog can easily return more matching tickets than one sweep should touch at once. **Before dispatching anything**, build one prioritized list across all three statuses and cut it to `sweep.maxTicketsPerRun` (default 5) — this is a hard cap on the whole run, not per-status.
+This step applies to `default` and `count-override` modes. (`list` mode does everything here except the final cut, then stops instead of dispatching. `explicit` mode skips this step entirely — go straight to step 3 with exactly the named tickets.)
 
-Order the candidates like this, then take the top `sweep.maxTicketsPerRun`:
+A real backlog can easily return more matching tickets than one sweep should touch at once. **Before dispatching anything**, build one prioritized list across all three statuses and cut it to the effective cap (`sweep.maxTicketsPerRun`, or the number from `count-override` mode) — this is a hard cap on the whole run, not per-status.
+
+Order the candidates like this, then take the top N:
 
 1. **qaStatus tickets first** (finish what's already built before starting anything new).
 2. **buildStatus tickets second** (finish what's already approved/mid-build next).
 3. **toDoStatus tickets last** (only start new triage/planning work with whatever budget remains).
 4. Within each group, order by Jira priority (highest first), then by `updated` ascending (oldest-untouched first) as a tiebreak.
 
-If this project has had **fewer than 3 completed sweeps so far** (check: are there any tickets anywhere in this project carrying a pipeline comment marker like `[TRIAGE]`, `[TECH PLAN]`, `[BUILD]`, or `[QA REPORT`?), treat this as an early run and cap the list to **1** regardless of `sweep.maxTicketsPerRun`, so the first real end-to-end pass is easy to watch and sanity-check before trusting it with a full batch. Say explicitly in your final summary that you did this and why.
+In `default` mode only: if this project has had **fewer than 3 completed sweeps so far** (check: are there any tickets anywhere in this project carrying a pipeline comment marker like `[TRIAGE]`, `[TECH PLAN]`, `[BUILD]`, or `[QA REPORT`?), treat this as an early run and cap the list to **1** regardless of `sweep.maxTicketsPerRun`, so the first real end-to-end pass is easy to watch and sanity-check before trusting it with a full batch. Say explicitly in your final summary that you did this and why. `count-override` mode never applies this — an explicit number is already the user overriding the default.
 
-Anything that didn't make the cut this pass is simply left for the next sweep — no action needed on it, nothing to flag.
+In `list` mode: keep the whole ordered list (don't cut it), and mark each entry with the cap line — i.e. show which ones would run in a `default`-mode pass and which wouldn't, so the count is informative context, not just a raw dump.
+
+Anything that didn't make the cut this pass (`default`/`count-override` modes) is simply left for the next sweep — no action needed on it, nothing to flag.
 
 ## 3. Categorize and dispatch
+
+In `list` mode, work out which agent each ticket *would* go to using the rules below, note it in the table, and stop — do not call the `Agent` tool at all in this mode.
 
 For each ticket in **toDoStatus**:
 
@@ -69,4 +82,6 @@ For each ticket in **qaStatus** with a pushed branch → dispatch to the `qa-ver
 
 ## 6. End of sweep
 
-Summarize in your final message (to whoever/whatever invoked this — a human or the cron log): how many tickets matched vs. how many were actually touched (i.e. how many were left capped for next run), what stage each touched ticket moved to, and anything that hit `needs-human` or `needs-triage-decision` this pass. Push-notifications for individual ready-for-review or stuck tickets happen from within the relevant agent (qa-verify, research-triage) as they complete — this summary is the sweep-level roundup, not a duplicate notification.
+**`list` mode** ends with just the table from steps 2-3 — ticket key, type, summary, current status, the agent it would go to (or the reason it'd be skipped), and whether it falls inside or outside the default cap. Nothing was dispatched, so there's nothing else to report. Tell the user how to act on it: `/pipeline-sweep <count>` to run the top N, or `/pipeline-sweep TICKET-1,TICKET-2` to run specific ones.
+
+**`default`, `count-override`, and `explicit` modes** end with a summary in your final message (to whoever/whatever invoked this — a human or the cron log): how many tickets matched vs. how many were actually touched (i.e. how many were left capped for next run — not applicable in `explicit` mode, where the named list *is* the run), what stage each touched ticket moved to, and anything that hit `needs-human` or `needs-triage-decision` this pass. Push-notifications for individual ready-for-review or stuck tickets happen from within the relevant agent (qa-verify, research-triage) as they complete — this summary is the sweep-level roundup, not a duplicate notification.
