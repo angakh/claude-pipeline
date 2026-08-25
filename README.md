@@ -2,7 +2,7 @@
 
 A Claude Code plugin that runs a Jira ticket through a full delivery cycle — confirm the problem is real, plan it, build it, QA it, hand it to a human — with Jira itself as the state machine so the process survives between runs without any external database.
 
-**Status: has a git remote, not on any marketplace listing.** Source lives at [github.com/angakh/claude-pipeline](https://github.com/angakh/claude-pipeline) — confirm its visibility matches your intent (kept out of any public/shared marketplace listing until it's solid). Install it from the local path or the git URL; either way it's only reachable by people with access to that repo.
+**Status: public on GitHub, not on any marketplace listing.** Source lives at [github.com/angakh/claude-pipeline](https://github.com/angakh/claude-pipeline). Being public means anyone with the URL can find and install it, but it's still not submitted to Anthropic's official marketplace or any other curated/discovery listing — nobody browsing a marketplace UI will stumble onto it, only someone who already has this link.
 
 ## The idea
 
@@ -124,6 +124,6 @@ references/
 
 ## Known limitations / not yet built
 
-- Not listed on any marketplace by design — reachable only via the git remote or local path, not ready to share broadly.
+- Public on GitHub but not listed on any marketplace by design — findable only by URL, not surfaced through marketplace discovery.
 - Agent `tools` are currently unrestricted (`"*"`) for all five agents to avoid under-provisioning during early iteration; worth tightening per-agent once the flows are proven out (e.g. `pm-decompose` and `tech-planner` don't need write/edit access to code at all).
 - Parallel-ticket worktree isolation is specified in `pipeline-sweep.md` but hasn't been exercised under real concurrent load yet.
