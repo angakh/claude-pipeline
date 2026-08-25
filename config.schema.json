@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "delivery-pipeline project config",
+  "description": "Per-project settings for the delivery-pipeline plugin. Lives at .claude/delivery-pipeline.config.json inside the project repo (checked into git — it holds identifiers, never secrets). Generate it by running the pipeline-init command; every field below has a one-line explanation of what it means and why the pipeline needs it.",
+  "type": "object",
+  "required": ["jira", "git", "dev", "db", "qa"],
+  "properties": {
+    "jira": {
+      "type": "object",
+      "required": ["cloudId", "projectKey", "toDoStatus", "planReviewStatus", "buildStatus", "qaStatus", "doneStatus"],
+      "properties": {
+        "cloudId": {
+          "type": "string",
+          "description": "Atlassian cloud ID or site hostname (e.g. 'yourteam.atlassian.net'). Identifies which Jira site to query. Get it from mcp__atlassian__getAccessibleAtlassianResources."
+        },
+        "projectKey": {
+          "type": "string",
+          "description": "The Jira project key the pipeline watches, e.g. 'SCR'. Only tickets in this project are ever touched."
+        },
+        "toDoStatus": {
+          "type": "string",
+          "default": "To Do",
+          "description": "Status name that means 'nobody has looked at this yet' — the pipeline's entry point. Must be an exact status name in your project's workflow, not a board column label."
+        },
+        "planReviewStatus": {
+          "type": "string",
+          "default": "In Review",
+          "description": "Status used for BOTH human gates: (1) a drafted plan is waiting for your approval, and (2) a QA-passed build is waiting for your merge decision. The pipeline tells these two apart using ticket labels, not the status alone."
+        },
+        "buildStatus": {
+          "type": "string",
+          "default": "In Progress",
+          "description": "Status that means 'plan is approved, go build it.' You (or a reviewer) move a ticket here yourself to approve a plan — that drag/click IS the approval mechanism, no separate tool needed."
+        },
+        "qaStatus": {
+          "type": "string",
+          "default": "Re-Test",
+          "description": "Status that means 'a branch has been built, QA should verify it.' Used both for first-time QA and every re-check after a fix."
+        },
+        "doneStatus": {
+          "type": "string",
+          "default": "Done",
+          "description": "Terminal status. The pipeline only ever sets this for epics whose child stories have been generated (its job is finished); everything else is left in planReviewStatus for you to close after you merge."
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "required": ["trunkBranch", "branchPrefix"],
+      "properties": {
+        "trunkBranch": {
+          "type": "string",
+          "description": "Branch the pipeline branches FROM and eventually targets for the human's merge — e.g. 'master' or 'main'. The pipeline NEVER pushes to this branch directly."
+        },
+        "branchPrefix": {
+          "type": "string",
+          "description": "Prefix used to build each feature branch name, with the Jira ticket key appended — e.g. prefix 'feature/' + ticket 'SCR-144' -> 'feature/SCR-144'."
+        },
+        "oneCommitPerBranch": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, the engineer agent squashes all its work into a single commit per branch (matches squash-merge workflows). Set false if your repo prefers incremental commit history."
+        },
+        "remote": {
+          "type": "string",
+          "default": "origin",
+          "description": "Git remote name to push feature branches to."
+        }
+      }
+    },
+    "dev": {
+      "type": "object",
+      "required": ["startCommand", "localUrl", "testCommand"],
+      "properties": {
+        "startCommand": {
+          "type": "string",
+          "description": "Shell command that starts the app locally on the feature branch, e.g. 'yarn dev'. QA runs this before driving the browser."
+        },
+        "localUrl": {
+          "type": "string",
+          "description": "URL the QA agent points the browser (Chrome MCP) at once the dev server is up, e.g. 'http://localhost:3000'."
+        },
+        "readyCheckCommand": {
+          "type": "string",
+          "description": "Optional command/curl that returns success once the dev server is actually ready to serve traffic, so QA doesn't race a slow boot. If omitted, QA polls localUrl instead."
+        },
+        "testCommand": {
+          "type": "string",
+          "description": "Shell command that runs the automated test suite, e.g. 'yarn jest'. Run by both the engineer (sanity check before handoff) and QA (authoritative check)."
+        }
+      }
+    },
+    "db": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["direct-readonly", "single-record-only", "local-restore-only"],
+          "default": "direct-readonly",
+          "description": "How the research/triage and QA agents are allowed to verify things against production data. 'direct-readonly': SELECT-only queries straight against prod via the Render Postgres MCP, no size limit. 'single-record-only': direct queries allowed only for single-record lookups (one user, one space); anything broader requires a local restore. 'local-restore-only': every investigation restores a prod dump locally first — the pipeline never queries live prod directly. In all modes, write queries against prod are never permitted."
+        },
+        "renderPostgresId": {
+          "type": "string",
+          "description": "Render Postgres instance ID/name to query when mode allows direct queries. Get it from mcp__render__list_postgres_instances."
+        },
+        "restoreRunbookPath": {
+          "type": "string",
+          "description": "Path (relative to the project repo) to the doc describing how to pull down and restore a prod dump locally. Required if mode is 'local-restore-only', otherwise used only as a fallback when a direct query can't answer the question."
+        }
+      }
+    },
+    "qa": {
+      "type": "object",
+      "required": ["maxCycles", "testAccountStrategy"],
+      "properties": {
+        "maxCycles": {
+          "type": "integer",
+          "default": 3,
+          "description": "How many fail-and-retry loops (QA finds a problem -> engineer fixes -> QA re-checks) are allowed on one ticket before the pipeline stops looping and escalates to a human instead of continuing to spend cycles."
+        },
+        "testAccountStrategy": {
+          "type": "string",
+          "description": "How QA (and research/triage, when reproducing in-browser) gets a safe account to use — never the real reporting user's account/credentials. E.g. a command to provision a quicklogin/test user, or a fixed test-account description."
+        }
+      }
+    },
+    "pr": {
+      "type": "object",
+      "properties": {
+        "autoCreate": {
+          "type": "boolean",
+          "default": true,
+          "description": "If true, the QA agent opens a pull request (feature branch -> trunkBranch) once a build passes verification, so you get a diff view. It never merges the PR itself."
+        }
+      }
+    },
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "type": "string",
+          "enum": ["push"],
+          "default": "push",
+          "description": "How the pipeline reaches you for the things it can't decide on its own: a plan/build ready for review, or a ticket that's stuck after maxCycles QA failures. Currently only push notification is supported."
+        }
+      }
+    }
+  }
+}
